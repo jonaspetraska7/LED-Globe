@@ -10,6 +10,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Timers;
 
 namespace LED_Globe_Project
 {
@@ -49,6 +50,7 @@ namespace LED_Globe_Project
         {
             textBox1.AppendText(string.Format("[COLOR] Atvaizduojama spalva R: {0}  G: {1}  B: {2} \r\n",
                 button5.BackColor.R, button5.BackColor.G, button5.BackColor.B));
+            pictureBox2.Image = simulatedProjection(solidFill(button5.BackColor), 3);
         }
 
         // Atvaizduoti Teksta
@@ -56,6 +58,7 @@ namespace LED_Globe_Project
         {
             textBox1.AppendText(string.Format("[TEXT] Atvaizduojama tekstas : \"{0}\"  \r\n",
                 textBox2.Text));
+            pictureBox2.Image = simulatedProjection(resizeImage(360,70,textAsImage(textBox2.Text)), 3);
         }
 
         // Atvaizduoti Paveiksleli
@@ -63,6 +66,8 @@ namespace LED_Globe_Project
         {
             textBox1.AppendText(string.Format("[IMAGE] Atvaizduojamas paveikslelis \"{0}\"  \r\n",
                 openFileDialog1.SafeFileName));
+            pictureBox2.Image = simulatedProjection(pictureBox1.Image, 3);
+            
         }
 
         // Pasirinkti Paveiksleli
@@ -75,6 +80,134 @@ namespace LED_Globe_Project
                 pictureBox1.Image = resizedImage;
             }
 
+        }
+
+        // Slenkanti Animacija
+        private void button8_Click(object sender, EventArgs e)
+        {
+            // FastScroll (kartai, greitis(delay), pikseliu atskirtis(atvaizdavimui), horizontalus(BOOL), kryptisX(1 arba-1))
+            FastScroll(2, 5, 3, true, -1);
+        }
+
+        private Image simulatedProjection(Image original, int spacing)
+        {
+            if (original == null) return null;
+            var image = original;
+            var bmImage = (Bitmap)image;
+            Bitmap bm = new Bitmap(image.Width * spacing, image.Height * spacing);
+            for (int x = 0; x < bm.Width; x++)
+            {
+                for (int y = 0; y < bm.Height; y++)
+                {
+                    if (x % spacing == 0 && y % spacing == 0)
+                    {
+                        bm.SetPixel(x, y, bmImage.GetPixel(x / spacing, y / spacing));
+                    }
+                }
+            }
+            return bm;
+        }
+
+        public Image solidFill(Color color)
+        {
+            Bitmap bm = new Bitmap(360, 70);
+            for (int x = 0; x < bm.Width; x++)
+            {
+                for (int y = 0; y < bm.Height; y++)
+                {
+                    bm.SetPixel(x, y, color);
+                }
+            }
+            return bm;
+        }
+
+        public void FastScroll(int n, int interval, int spacing, bool isHorizontal, int direction)
+        {
+            for (int time = 0; time < n; time++)
+            {
+                var originalMain = (Bitmap)pictureBox2.Image;
+                var extended = isHorizontal ? new Bitmap(originalMain.Width*2, originalMain.Height) : new Bitmap(originalMain.Width, originalMain.Height * 2);
+                using (TextureBrush brush = new TextureBrush(originalMain, WrapMode.Tile))
+                using (Graphics g = Graphics.FromImage(extended))
+                {
+                    // Do your painting in here
+                    g.FillRectangle(brush, 0, 0, extended.Width, extended.Height);
+                }
+                var distance = isHorizontal ? originalMain.Width : originalMain.Height;
+                for (int x = 0; x < distance/3; x++)
+                {
+                    Bitmap bm = (Bitmap)scrollCanvas(extended, spacing, isHorizontal, direction);
+                    var directionXY = direction < 0 ? originalMain.Height : 0;
+                    directionXY = isHorizontal ? originalMain.Width : directionXY;
+                    var output = isHorizontal ? bm.Clone(new Rectangle(directionXY, 0, originalMain.Width, originalMain.Height), PixelFormat.Format32bppArgb) :
+                        bm.Clone(new Rectangle(0, directionXY, originalMain.Width, originalMain.Height), PixelFormat.Format32bppArgb);
+                    pictureBox2.Image = output;
+                    pictureBox2.Refresh();
+                    System.Threading.Thread.Sleep(interval);
+                    extended = bm;
+                }
+            }
+        }
+
+
+
+        private Image scrollCanvas(Image _bitmap1,int amountPixels,bool isHorizontal, int direction)
+        {
+            Rectangle source, dest;
+            Bitmap bm = (Bitmap)_bitmap1;
+            int w, h, pw, ph;
+
+            w = _bitmap1.Width;
+            h = _bitmap1.Height;
+
+            amountPixels *= direction;
+            if (isHorizontal)
+            {
+                if (amountPixels < 0)
+                {
+                    source = new Rectangle(0, 0, w + amountPixels, h);
+                    dest = new Rectangle(-amountPixels, 0, w + amountPixels, h);
+                }
+                else
+                {
+                    source = new Rectangle(+amountPixels,0 , w - amountPixels, h );
+                    dest = new Rectangle(0, 0, w - amountPixels, h);
+                }
+            }
+            else
+            {
+                if (amountPixels < 0)
+                {
+                    source = new Rectangle(0, 0, w, h + amountPixels);
+                    dest = new Rectangle(0, -amountPixels, w, h + amountPixels);
+                }
+                else
+                {
+                    source = new Rectangle(0, +amountPixels, w, h - amountPixels);
+                    dest = new Rectangle(0, 0, w, h - amountPixels);
+                }
+            }
+
+            using (Graphics g = Graphics.FromImage(bm))
+            {
+                // Do your painting in here
+                g.DrawImage(_bitmap1, dest, source, GraphicsUnit.Pixel);
+            }
+            return bm;
+        }
+
+        public Image textAsImage(String text)
+        {
+            Font font = new Font("Arial", 16);
+            SolidBrush brush = new SolidBrush(Color.Red);
+            Point point = new Point(0, 20);
+            var bmp = new Bitmap(360, 70);
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.DrawString(text,font,brush,point);
+            }
+
+            return bmp;
         }
 
         public Image resizeImage(int newWidth, int newHeight, Image img)
