@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Timers;
+using System.Threading;
 
 namespace LED_Globe_Project
 {
@@ -51,6 +52,7 @@ namespace LED_Globe_Project
             textBox1.AppendText(string.Format("[COLOR] Atvaizduojama spalva R: {0}  G: {1}  B: {2} \r\n",
                 button5.BackColor.R, button5.BackColor.G, button5.BackColor.B));
             pictureBox2.Image = simulatedProjection(solidFill(button5.BackColor), 3);
+            pictureBox1.Image = simulatedProjection(solidFill(button5.BackColor), 1);
         }
 
         // Atvaizduoti Teksta
@@ -59,6 +61,7 @@ namespace LED_Globe_Project
             textBox1.AppendText(string.Format("[TEXT] Atvaizduojama tekstas : \"{0}\"  \r\n",
                 textBox2.Text));
             pictureBox2.Image = simulatedProjection(resizeImage(360,70,textAsImage(textBox2.Text)), 3);
+            pictureBox1.Image = simulatedProjection(resizeImage(360, 70, textAsImage(textBox2.Text)), 1);
         }
 
         // Atvaizduoti Paveiksleli
@@ -67,7 +70,8 @@ namespace LED_Globe_Project
             textBox1.AppendText(string.Format("[IMAGE] Atvaizduojamas paveikslelis \"{0}\"  \r\n",
                 openFileDialog1.SafeFileName));
             pictureBox2.Image = simulatedProjection(pictureBox1.Image, 3);
-            
+            pictureBox1.Image = simulatedProjection(pictureBox1.Image, 1);
+
         }
 
         // Pasirinkti Paveiksleli
@@ -78,15 +82,56 @@ namespace LED_Globe_Project
                 var uploadedImage = Image.FromStream(openFileDialog1.OpenFile());
                 var resizedImage = resizeImage(360, 70, uploadedImage);
                 pictureBox1.Image = resizedImage;
+                //var resizedBMP = (Bitmap)resizedImage;
+                //var arrayString = Bmp2String(resizedBMP);
+                //textBox1.AppendText(arrayString);
             }
 
+        }
+
+        private int[,] Bmp2Array (Bitmap bmp)
+        {
+            int[,] arr = new int[bmp.Height, bmp.Width];
+            for (int x = 0; x < bmp.Height; x++)
+            {
+                for (int y = 0; y < bmp.Width; y++)
+                {
+                    arr[x,y] = bmp.GetPixel(y, x).ToArgb();
+                }
+            }
+            return arr;
+        }
+
+        private string Bmp2String(Bitmap bmp)
+        {
+            string arr = "";
+            for (int x = 0; x < bmp.Height; x++)
+            {
+                for (int y = 0; y < bmp.Width; y++)
+                {
+                    arr += string.Format("[{0}]",bmp.GetPixel(y, x).ToArgb());
+                }
+                arr += "\r\n";
+            }
+            return arr;
         }
 
         // Slenkanti Animacija
         private void button8_Click(object sender, EventArgs e)
         {
-            // FastScroll (kartai, greitis(delay), pikseliu atskirtis(atvaizdavimui), horizontalus(BOOL), kryptisX(1 arba-1))
-            FastScroll(2, 5, 3, true, -1);
+            // FastScroll (kartai, greitis(delay), pikseliu atskirtis(atvaizdavimui), horizontalus(BOOL), kryptisX(1 arba-1), image'as)
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                /* run your code here */
+                FastScroll(2, 5, 1, true, -1, 1);
+            }).Start();
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                /* run your code here */
+                FastScroll(2, 5, 3, true, -1, 2);
+            }).Start();
         }
 
         private Image simulatedProjection(Image original, int spacing)
@@ -121,11 +166,11 @@ namespace LED_Globe_Project
             return bm;
         }
 
-        public void FastScroll(int n, int interval, int spacing, bool isHorizontal, int direction)
+        public void FastScroll(int n, int interval, int spacing, bool isHorizontal, int direction, int pictureBox)
         {
             for (int time = 0; time < n; time++)
             {
-                var originalMain = (Bitmap)pictureBox2.Image;
+                var originalMain = pictureBox == 2 ? (Bitmap)pictureBox2.Image : (Bitmap)pictureBox1.Image;
                 var extended = isHorizontal ? new Bitmap(originalMain.Width*2, originalMain.Height) : new Bitmap(originalMain.Width, originalMain.Height * 2);
                 using (TextureBrush brush = new TextureBrush(originalMain, WrapMode.Tile))
                 using (Graphics g = Graphics.FromImage(extended))
@@ -134,15 +179,25 @@ namespace LED_Globe_Project
                     g.FillRectangle(brush, 0, 0, extended.Width, extended.Height);
                 }
                 var distance = isHorizontal ? originalMain.Width : originalMain.Height;
-                for (int x = 0; x < distance/3; x++)
+                for (int x = 0; x < distance/spacing; x++)
                 {
                     Bitmap bm = (Bitmap)scrollCanvas(extended, spacing, isHorizontal, direction);
                     var directionXY = direction < 0 ? originalMain.Height : 0;
                     directionXY = isHorizontal ? originalMain.Width : directionXY;
                     var output = isHorizontal ? bm.Clone(new Rectangle(directionXY, 0, originalMain.Width, originalMain.Height), PixelFormat.Format32bppArgb) :
                         bm.Clone(new Rectangle(0, directionXY, originalMain.Width, originalMain.Height), PixelFormat.Format32bppArgb);
-                    pictureBox2.Image = output;
-                    pictureBox2.Refresh();
+                    if(pictureBox == 2)
+                    {
+                        ThreadHelperClass.SetImage(this, pictureBox2, output);
+                        ThreadHelperClass.Refresh(this, pictureBox2, output);
+                    }
+                    else
+                    {
+                        ThreadHelperClass.SetImage(this, pictureBox1, output);
+                        ThreadHelperClass.Refresh(this, pictureBox1, output);
+
+                    }
+                    
                     System.Threading.Thread.Sleep(interval);
                     extended = bm;
                 }
@@ -268,6 +323,48 @@ namespace LED_Globe_Project
             imgPhoto.Dispose();
             bmPhoto.Save("LOWER_RES.jpg");
             return bmPhoto;
+        }
+    }
+
+    public static class ThreadHelperClass
+    {
+        delegate void SetImageCallback(Form f, PictureBox ctrl, Image img);
+        /// <summary>
+        /// Set text property of various controls
+        /// </summary>
+        /// <param name="form">The calling form</param>
+        /// <param name="ctrl"></param>
+        /// <param name="text"></param>
+        public static void SetImage(Form form, PictureBox ctrl, Image img)
+        {
+            // InvokeRequired required compares the thread ID of the 
+            // calling thread to the thread ID of the creating thread. 
+            // If these threads are different, it returns true. 
+            if (ctrl.InvokeRequired)
+            {
+                SetImageCallback d = new SetImageCallback(SetImage);
+                form.Invoke(d, new object[] { form, ctrl, img });
+            }
+            else
+            {
+                ctrl.Image = img;
+            }
+        }
+
+        public static void Refresh(Form form, PictureBox ctrl, Image img)
+        {
+            // InvokeRequired required compares the thread ID of the 
+            // calling thread to the thread ID of the creating thread. 
+            // If these threads are different, it returns true. 
+            if (ctrl.InvokeRequired)
+            {
+                SetImageCallback d = new SetImageCallback(SetImage);
+                form.Invoke(d, new object[] { form, ctrl, img});
+            }
+            else
+            {
+                ctrl.Refresh();
+            }
         }
     }
 }
