@@ -22,10 +22,15 @@ namespace LED_Globe_Project
             InitializeComponent();
         }
 
+        private int DIRECTION;
+        private bool HORIZONTAL;
+
         private void Form1_Load(object sender, EventArgs e)
         {
             button5.BackColor = colorDialog1.Color;
             openFileDialog1.Title = "Ikelti Paveiksleli";
+            DIRECTION = -1;
+            HORIZONTAL = true;
         }
         // Ijungti Varikli
         private void button1_Click(object sender, EventArgs e)
@@ -82,11 +87,53 @@ namespace LED_Globe_Project
                 var uploadedImage = Image.FromStream(openFileDialog1.OpenFile());
                 var resizedImage = resizeImage(360, 70, uploadedImage);
                 pictureBox1.Image = resizedImage;
+                pictureBox2.Image = simulatedProjection(pictureBox1.Image, 3);
                 //var resizedBMP = (Bitmap)resizedImage;
                 //var arrayString = Bmp2String(resizedBMP);
                 //textBox1.AppendText(arrayString);
             }
 
+        }
+
+        // Slenkanti Animacija
+        private void button8_Click(object sender, EventArgs e)
+        {
+            // FastScroll (kartai, greitis(delay), pikseliu atskirtis(atvaizdavimui), horizontalus(BOOL), kryptisX(1 arba-1), image'as)
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                FastScroll(1, 3, 1, HORIZONTAL, DIRECTION, 1);
+            }).Start();
+            new Thread(() =>
+            {
+                Thread.CurrentThread.IsBackground = true;
+                FastScroll(1, 3, 3, HORIZONTAL, DIRECTION, 2);
+            }).Start();
+        }
+
+        // I virsu
+        private void radioButton1_CheckedChanged(object sender, EventArgs e)
+        {
+            HORIZONTAL = false;
+            DIRECTION = 1;
+        }
+        // I apacia
+        private void radioButton2_CheckedChanged(object sender, EventArgs e)
+        {
+            HORIZONTAL = false;
+            DIRECTION = -1;
+        }
+        // I kaire
+        private void radioButton3_CheckedChanged(object sender, EventArgs e)
+        {
+            HORIZONTAL = true;
+            DIRECTION = 1;
+        }
+        // I desine
+        private void radioButton4_CheckedChanged(object sender, EventArgs e)
+        {
+            HORIZONTAL = true;
+            DIRECTION = -1;
         }
 
         private int[,] Bmp2Array (Bitmap bmp)
@@ -114,24 +161,6 @@ namespace LED_Globe_Project
                 arr += "\r\n";
             }
             return arr;
-        }
-
-        // Slenkanti Animacija
-        private void button8_Click(object sender, EventArgs e)
-        {
-            // FastScroll (kartai, greitis(delay), pikseliu atskirtis(atvaizdavimui), horizontalus(BOOL), kryptisX(1 arba-1), image'as)
-            new Thread(() =>
-            {
-                Thread.CurrentThread.IsBackground = true;
-                /* run your code here */
-                FastScroll(2, 5, 1, true, -1, 1);
-            }).Start();
-            new Thread(() =>
-            {
-                Thread.CurrentThread.IsBackground = true;
-                /* run your code here */
-                FastScroll(2, 5, 3, true, -1, 2);
-            }).Start();
         }
 
         private Image simulatedProjection(Image original, int spacing)
@@ -184,6 +213,7 @@ namespace LED_Globe_Project
                     Bitmap bm = (Bitmap)scrollCanvas(extended, spacing, isHorizontal, direction);
                     var directionXY = direction < 0 ? originalMain.Height : 0;
                     directionXY = isHorizontal ? originalMain.Width : directionXY;
+                    directionXY = isHorizontal == true && direction > 0 ? 0 : directionXY;
                     var output = isHorizontal ? bm.Clone(new Rectangle(directionXY, 0, originalMain.Width, originalMain.Height), PixelFormat.Format32bppArgb) :
                         bm.Clone(new Rectangle(0, directionXY, originalMain.Width, originalMain.Height), PixelFormat.Format32bppArgb);
                     if(pictureBox == 2)
