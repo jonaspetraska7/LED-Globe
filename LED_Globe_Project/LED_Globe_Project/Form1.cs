@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Timers;
 using System.Threading;
+using System.IO.Ports;
+using System.Diagnostics;
 
 namespace LED_Globe_Project
 {
@@ -20,10 +22,37 @@ namespace LED_Globe_Project
         public Form1()
         {
             InitializeComponent();
+            getAvailableComPorts();
+
+            foreach (string port in ports)
+            {
+                comboBox1.Items.Add(port);
+                Console.WriteLine(port);
+                if (ports[0] != null)
+                {
+                    comboBox1.SelectedItem = ports[0];
+                }
+            }
+        }
+
+        void getAvailableComPorts()
+        {
+            ports = SerialPort.GetPortNames();
+        }
+
+        private void connectToArduino()
+        {
+            isConnected = true;
+            string selectedPort = comboBox1.GetItemText(comboBox1.SelectedItem);
+            port = new SerialPort(selectedPort, 9600, Parity.None, 8, StopBits.One);
+            port.Open();
         }
 
         private int DIRECTION;
         private bool HORIZONTAL;
+        private String[] ports;
+        private SerialPort port;
+        private bool isConnected = false;
 
         private void Form1_Load(object sender, EventArgs e)
         {
@@ -36,12 +65,14 @@ namespace LED_Globe_Project
         private void button1_Click(object sender, EventArgs e)
         {
             textBox1.AppendText("[ON] Variklis Ijungtas !\r\n");
+            if (isConnected) port.Write("O\n");
         }
 
         // Isjungti Varikli
         private void button2_Click(object sender, EventArgs e)
         {
             textBox1.AppendText("[OFF] Variklis Išjungtas !\r\n");
+            if (isConnected) port.Write("F\n");
         }
 
         // Pasirinkti Spalva
@@ -58,6 +89,7 @@ namespace LED_Globe_Project
                 button5.BackColor.R, button5.BackColor.G, button5.BackColor.B));
             pictureBox2.Image = simulatedProjection(solidFill(button5.BackColor), 3);
             pictureBox1.Image = simulatedProjection(solidFill(button5.BackColor), 1);
+            realProjection(solidFill(button5.BackColor), (byte)'S', 0, 0);
         }
 
         // Atvaizduoti Teksta
@@ -67,6 +99,8 @@ namespace LED_Globe_Project
                 textBox2.Text));
             pictureBox2.Image = simulatedProjection(resizeImage(360,70,textAsImage(textBox2.Text)), 3);
             pictureBox1.Image = simulatedProjection(resizeImage(360, 70, textAsImage(textBox2.Text)), 1);
+            realProjection(resizeImage(360, 70, textAsImage(textBox2.Text)), (byte)'S', 0, 0);
+
         }
 
         // Atvaizduoti Paveiksleli
@@ -76,6 +110,7 @@ namespace LED_Globe_Project
                 openFileDialog1.SafeFileName));
             pictureBox2.Image = simulatedProjection(pictureBox1.Image, 3);
             pictureBox1.Image = simulatedProjection(pictureBox1.Image, 1);
+            realProjection(pictureBox1.Image, (byte)'S', 0, 0);
 
         }
 
@@ -98,17 +133,25 @@ namespace LED_Globe_Project
         // Slenkanti Animacija
         private void button8_Click(object sender, EventArgs e)
         {
+            realProjection(pictureBox1.Image, (byte)'A', 1, 1);
             // FastScroll (kartai, greitis(delay), pikseliu atskirtis(atvaizdavimui), horizontalus(BOOL), kryptisX(1 arba-1), image'as)
             new Thread(() =>
             {
                 Thread.CurrentThread.IsBackground = true;
                 FastScroll(1, 3, 1, HORIZONTAL, DIRECTION, 1);
+
             }).Start();
             new Thread(() =>
             {
                 Thread.CurrentThread.IsBackground = true;
                 FastScroll(1, 3, 3, HORIZONTAL, DIRECTION, 2);
             }).Start();
+        }
+
+        // Prisijungti
+        private void button9_Click(object sender, EventArgs e)
+        {
+            connectToArduino();
         }
 
         // I virsu
@@ -163,12 +206,45 @@ namespace LED_Globe_Project
             return arr;
         }
 
+        private void realProjection(Image original,byte command, byte param1, byte param2)
+        {
+            int spacing = 1;
+            var image = original;
+            var bmImage = (Bitmap)image;
+            Bitmap bm = new Bitmap(image.Width * spacing, image.Height * spacing);
+
+            int ARRAY_SIZE = (bm.Width * bm.Height * 3) + 1 + 2 + 1;
+
+            byte[] inline = new byte[ARRAY_SIZE];
+
+            inline[0] = command;
+            inline[1] = param1;
+            inline[2] = param2;
+
+            for (int x = 0; x < bm.Width; x++)
+            {
+                for (int y = 0; y < bm.Height*3; y+=3)
+                {
+                    inline[3 + (x * bm.Height * 3) + y] = bmImage.GetPixel(x, y/3).R;
+                    inline[3 + (x * bm.Height * 3) + y + 1] = bmImage.GetPixel(x, y/3).G;
+                    inline[3 + (x * bm.Height * 3) + y + 2] = bmImage.GetPixel(x, y/3).B;
+                }
+            }
+
+            inline[ARRAY_SIZE-1] = (byte)'\n';
+            if(isConnected) port.Write(inline, 0, ARRAY_SIZE);            
+            //string s = BitConverter.ToString(inline);
+            //textBox1.AppendText(s);
+        }
+
         private Image simulatedProjection(Image original, int spacing)
         {
             if (original == null) return null;
             var image = original;
             var bmImage = (Bitmap)image;
             Bitmap bm = new Bitmap(image.Width * spacing, image.Height * spacing);
+            //int[,] arr = new int[bm.Width, bm.Height];
+           // byte[] inline = new byte[];
             for (int x = 0; x < bm.Width; x++)
             {
                 for (int y = 0; y < bm.Height; y++)
@@ -176,9 +252,13 @@ namespace LED_Globe_Project
                     if (x % spacing == 0 && y % spacing == 0)
                     {
                         bm.SetPixel(x, y, bmImage.GetPixel(x / spacing, y / spacing));
+                        //if (spacing == 1) arr[x, y] = bm.GetPixel(x, y).ToArgb();
                     }
                 }
             }
+            
+            //if(isConnected) port.Write(string.Format("D{0}\n",inline));
+            //port.Write()
             return bm;
         }
 
@@ -353,6 +433,11 @@ namespace LED_Globe_Project
             imgPhoto.Dispose();
             bmPhoto.Save("LOWER_RES.jpg");
             return bmPhoto;
+        }
+
+        private void label1_Click(object sender, EventArgs e)
+        {
+
         }
     }
 
