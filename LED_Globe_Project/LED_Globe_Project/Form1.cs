@@ -65,14 +65,22 @@ namespace LED_Globe_Project
         private void button1_Click(object sender, EventArgs e)
         {
             textBox1.AppendText("[ON] Variklis Ijungtas !\r\n");
-            if (isConnected) port.Write("O\n");
+            byte[] inline = new byte[3];
+            inline[0] = (byte)'O';
+            inline[1] = 0;
+            inline[2] = (byte)'\n';
+            if (isConnected) port.Write(inline, 0, 3);
         }
 
         // Isjungti Varikli
         private void button2_Click(object sender, EventArgs e)
         {
             textBox1.AppendText("[OFF] Variklis Išjungtas !\r\n");
-            if (isConnected) port.Write("F\n");
+            byte[] inline = new byte[3];
+            inline[0] = (byte)'F';
+            inline[1] = 0;
+            inline[2] = (byte)'\n';
+            if (isConnected) port.Write(inline, 0, 3);
         }
 
         // Pasirinkti Spalva
